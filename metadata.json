@@ -1,0 +1,8 @@
+{
+  "name": "Remix Myra",
+  "description": "Myra is an advanced AI phone companion and system controller with voice interaction and full device tools.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
