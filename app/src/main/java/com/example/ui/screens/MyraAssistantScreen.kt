@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -39,6 +40,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -56,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.local.ChatMessageEntity
 import com.example.ui.MyraViewModel
+import com.example.ui.components.AudioRecordingBottomSheet
 import com.example.ui.components.MyraCoreVisualizer
 import com.example.ui.components.MyraState
 import com.example.ui.theme.MyraBgDark
@@ -71,6 +74,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MyraAssistantScreen(
     viewModel: MyraViewModel,
@@ -81,6 +85,17 @@ fun MyraAssistantScreen(
     val myraState by viewModel.myraState.collectAsState()
     val isVoiceMuted by viewModel.isVoiceMuted.collectAsState()
     val listState = rememberLazyListState()
+
+    // Audio recording interface states
+    val isRecordingSheetOpen by viewModel.isRecordingSheetOpen.collectAsState()
+    val recorderState by viewModel.recorderState.collectAsState()
+    val recordingDuration by viewModel.recordingDuration.collectAsState()
+    val currentAmplitude by viewModel.currentAmplitude.collectAsState()
+    val waveformSamples by viewModel.waveformSamples.collectAsState()
+    val transcribedSpeech by viewModel.transcribedSpeech.collectAsState()
+    val recordingStatus by viewModel.recordingStatus.collectAsState()
+    val recordedAudioFile by viewModel.recordedAudioFile.collectAsState()
+    val playbackProgress by viewModel.playbackProgress.collectAsState()
 
     var textInput by remember { mutableStateOf("") }
 
@@ -340,6 +355,28 @@ fun MyraAssistantScreen(
                     )
                 }
             }
+        }
+
+        // Dedicated Microphone Audio Recording Interface Bottom Sheet
+        if (isRecordingSheetOpen) {
+            AudioRecordingBottomSheet(
+                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                recorderState = recorderState,
+                durationSeconds = recordingDuration,
+                currentAmplitude = currentAmplitude,
+                waveformSamples = waveformSamples,
+                transcribedText = transcribedSpeech,
+                statusMessage = recordingStatus,
+                audioFile = recordedAudioFile,
+                playbackProgress = playbackProgress,
+                onDismiss = { viewModel.closeRecordingSheet() },
+                onToggleRecord = { viewModel.toggleVoiceRecording() },
+                onPlayAudio = { viewModel.playRecordedAudio() },
+                onPauseAudio = { viewModel.pauseRecordedAudio() },
+                onCancelRecording = { viewModel.cancelVoiceRecording() },
+                onUpdateTranscribedText = { viewModel.updateTranscribedVoiceText(it) },
+                onSubmitCommand = { cmd -> viewModel.submitVoiceCommand(cmd) }
+            )
         }
     }
 }

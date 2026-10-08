@@ -2,6 +2,7 @@ package com.example
 
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.speech.RecognizerIntent
 import android.widget.Toast
@@ -32,9 +33,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.example.ui.AppTab
 import com.example.ui.MyraViewModel
 import com.example.ui.screens.MyraAssistantScreen
@@ -67,32 +70,34 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainContent(viewModel: MyraViewModel) {
     val currentTab by viewModel.currentTab.collectAsState()
+    val context = LocalContext.current
 
-    // Speech-to-Text Recognition Launcher
-    val speechLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        viewModel.setListeningState(false)
-        if (result.resultCode == Activity.RESULT_OK) {
-            val spokenTextList = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-            val spokenText = spokenTextList?.firstOrNull()
-            if (!spokenText.isNullOrBlank()) {
-                viewModel.handleUserPrompt(spokenText)
-            }
-        }
-    }
-
-    // Permission launcher for Audio Record
+    // Audio recording microphone permission launcher
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
-            startSpeechInput(speechLauncher, viewModel)
+            viewModel.openRecordingSheet()
+        } else {
+            Toast.makeText(
+                context,
+                "Microphone permission is required to capture voice commands",
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
 
     val onMicClick: () -> Unit = {
-        permissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+        val hasPermission = ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (hasPermission) {
+            viewModel.openRecordingSheet()
+        } else {
+            permissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+        }
     }
 
     // Handle back button to return to Assistant screen if in sub-tabs

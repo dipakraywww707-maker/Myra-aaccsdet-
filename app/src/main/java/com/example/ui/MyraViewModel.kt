@@ -4,6 +4,8 @@ import android.app.Application
 import android.media.AudioManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.data.audio.RecorderState
+import com.example.data.audio.VoiceRecorderManager
 import com.example.data.gemini.MyraAiRepository
 import com.example.data.local.ChatMessageEntity
 import com.example.data.local.MyraDatabase
@@ -22,6 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.io.File
 
 enum class AppTab {
     ASSISTANT,
@@ -38,6 +41,7 @@ class MyraViewModel(application: Application) : AndroidViewModel(application) {
 
     val phoneSystemManager = PhoneSystemManager(application)
     val voiceManager = MyraVoiceManager(application)
+    val voiceRecorderManager = VoiceRecorderManager(application)
     private val aiRepository = MyraAiRepository()
 
     private val _currentTab = MutableStateFlow(AppTab.ASSISTANT)
@@ -45,6 +49,19 @@ class MyraViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _myraState = MutableStateFlow(MyraState.IDLE)
     val myraState: StateFlow<MyraState> = _myraState.asStateFlow()
+
+    // Voice recording interface states
+    val recorderState: StateFlow<RecorderState> = voiceRecorderManager.state
+    val recordingDuration: StateFlow<Int> = voiceRecorderManager.durationSeconds
+    val currentAmplitude: StateFlow<Float> = voiceRecorderManager.amplitude
+    val waveformSamples: StateFlow<List<Float>> = voiceRecorderManager.waveformSamples
+    val transcribedSpeech: StateFlow<String> = voiceRecorderManager.transcribedText
+    val recordingStatus: StateFlow<String> = voiceRecorderManager.statusMessage
+    val recordedAudioFile: StateFlow<File?> = voiceRecorderManager.recordedAudioFile
+    val playbackProgress: StateFlow<Float> = voiceRecorderManager.playbackProgress
+
+    private val _isRecordingSheetOpen = MutableStateFlow(false)
+    val isRecordingSheetOpen: StateFlow<Boolean> = _isRecordingSheetOpen.asStateFlow()
 
     val messages: StateFlow<List<ChatMessageEntity>> = chatDao.getAllMessages()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -74,6 +91,17 @@ class MyraViewModel(application: Application) : AndroidViewModel(application) {
                 if (isSpeaking) {
                     _myraState.value = MyraState.SPEAKING
                 } else if (_myraState.value == MyraState.SPEAKING) {
+                    _myraState.value = MyraState.IDLE
+                }
+            }
+        }
+
+        // Collect voice recording state to update Myra visualizer state
+        viewModelScope.launch {
+            voiceRecorderManager.state.collect { recState ->
+                if (recState == RecorderState.RECORDING) {
+                    _myraState.value = MyraState.LISTENING
+                } else if (_myraState.value == MyraState.LISTENING && recState != RecorderState.RECORDING) {
                     _myraState.value = MyraState.IDLE
                 }
             }
@@ -224,8 +252,59 @@ class MyraViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun openRecordingSheet() {
+        _isRecordingSheetOpen.value = true
+        startVoiceRecording()
+    }
+
+    fun closeRecordingSheet() {
+        stopVoiceRecording()
+        voiceRecorderManager.stopPlayback()
+        _isRecordingSheetOpen.value = false
+    }
+
+    fun startVoiceRecording() {
+        voiceRecorderManager.startRecording()
+    }
+
+    fun stopVoiceRecording() {
+        voiceRecorderManager.stopRecording()
+    }
+
+    fun toggleVoiceRecording() {
+        if (voiceRecorderManager.state.value == RecorderState.RECORDING) {
+            voiceRecorderManager.stopRecording()
+        } else {
+            voiceRecorderManager.startRecording()
+        }
+    }
+
+    fun playRecordedAudio() {
+        voiceRecorderManager.playRecordedAudio()
+    }
+
+    fun pauseRecordedAudio() {
+        voiceRecorderManager.pausePlayback()
+    }
+
+    fun cancelVoiceRecording() {
+        voiceRecorderManager.cancelRecording()
+    }
+
+    fun updateTranscribedVoiceText(text: String) {
+        voiceRecorderManager.setCustomTranscribedText(text)
+    }
+
+    fun submitVoiceCommand(command: String) {
+        voiceRecorderManager.stopRecording()
+        voiceRecorderManager.stopPlayback()
+        _isRecordingSheetOpen.value = false
+        handleUserPrompt(command)
+    }
+
     override fun onCleared() {
         super.onCleared()
         voiceManager.shutdown()
+        voiceRecorderManager.release()
     }
 }
